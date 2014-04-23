@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use 5.010;
 use Carp;
+use Data::Dumper;
 
 use parent qw/Zabbix::API::CRUDE/;
 
@@ -26,6 +27,32 @@ sub id {
 
 }
 
+sub delete {
+
+    my $self = shift;
+
+    if ($self->id) {
+
+        say sprintf('Deleting %s %s', $self->prefix, $self->id)
+            if $self->{root}->{verbosity};
+
+        $self->{root}->query(method => $self->prefix('.delete'),
+                             params => [ { hostid => $self->id } ]);
+
+        delete $self->{root}->{stash}->{$self->prefix('s')}->{$self->id};
+
+        $self->{root}->dereference($self);
+
+    } else {
+
+        carp sprintf(q{Useless call of delete() on a %s that does not have a %s}, $self->prefix, $self->prefix('id'));
+
+    }
+
+    return $self;
+
+}
+
 sub prefix {
 
     my (undef, $suffix) = @_;
@@ -45,8 +72,8 @@ sub prefix {
 sub extension {
 
     return ( output => 'extend',
-             select_macros => 'extend',
-             select_groups => 'extend' );
+             selectMacros => 'extend',
+             selectGroups => 'extend' );
 
 }
 
