@@ -18,9 +18,11 @@ sub new {
 
     my $class = shift;
     my %args = validate(@_, { server => 1,
-                              verbosity => 0,
+                              verbosity => 1,
                               env_proxy => 0,
-                              lazy => 0 });
+                              lazy => 0,
+                              retries => 0,
+                              retry_delay => 0 });
 
     my $self = \%args;
 
@@ -28,11 +30,16 @@ sub new {
     $self->{verbosity} = 0 unless exists $self->{verbosity};
     $self->{env_proxy} = 0 unless exists $self->{env_proxy};
     $self->{lazy} = 0 unless exists $self->{lazy};
+    $self->{retries} = 0 unless exists $self->{retries};
+    $self->{retry_delay} = 60 unless exists $self->{retry_delay};
 
     $self->{stash} = {};
 
+    # timeout default is 180s
+
     $self->{ua} = LWP::UserAgent->new(agent => 'Zabbix API client (libwww-perl)',
                                       from => 'fabrice.gabolde@uperto.com',
+                                      timeout => 1200,
                                       show_progress => $self->{verbosity},
                                       env_proxy => $self->{env_proxy},);
 
@@ -185,39 +192,58 @@ sub raw_query {
     $args{'auth'} = $self->cookie || '';
     $args{'id'} = $global_id++;
 
-    my $response = eval { $self->{ua}->post($self->{server},
-                                            'Content-Type' => 'application/json-rpc',
-                                            Content => encode_json(\%args)) };
-
-    if ($@) {
-
-        my $error = $@;
-
-        confess $error;
-
+    # added debug output -mbroyles Aug. 3, 2013
+    if ($self->{verbosity} == 1) {
+       print Dumper(%args);
     }
 
-    given ($self->{verbosity}) {
-
-        when (1) {
-
-            print $response->as_string;
-
-        }
-
-        when (2) {
-
-            print Dumper($response);
-
-        }
-
-        default {
-
-        }
-
+    for (my $i=0; $i< $self->{retries}; $i++){
+      my $response = eval { $self->{ua}->post($self->{server},
+                                              'Content-Type' => 'application/json-rpc',
+                                              Content => encode_json(\%args)) };
+      if ($@) {
+  
+          my $error = $@;
+          if ($i > $self->{retries}) {
+            confess $error;
+          }
+          carp "Retrying [". ($i + 1) ."] of [$self->{retries}] times after [$self->{retry_delay}] seconds";
+          carp $error;
+          
+          sleep $self->{retry_delay};
+          next;
+      }
+      
+      if ($response->code != 200){
+        carp "Retrying [". ($i + 1) ."] of [$self->{retries}] times after [$self->{retry_delay}] seconds";
+        carp "Error [".$response->code."]";
+        
+        sleep $self->{retry_delay};
+        next;
+      }
+  
+      given ($self->{verbosity}) {
+  
+          when (1) {
+  
+              print $response->as_string;
+  
+          }
+  
+          when (2) {
+  
+              print Dumper($response);
+  
+          }
+  
+          default {
+  
+          }
+  
+      }
+  
+      return $response;
     }
-
-    return $response;
 
 }
 
