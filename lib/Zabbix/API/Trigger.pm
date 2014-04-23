@@ -56,9 +56,14 @@ sub collides {
 
     my $self = shift;
 
+    my $params =  {filter => { description => [ $self->data->{description} ] },
+                                              $self->extension};
+    if ($self->data->{hostid}) {
+      $params->{hostids} = [$self->data->{hostid}];
+    }
+
     return @{$self->{root}->query(method => $self->prefix('.get'),
-                                  params => { filter => { description => [ $self->data->{description} ] },
-                                              $self->extension })};
+                                  params => $params)};
 
 }
 
